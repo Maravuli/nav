@@ -99,33 +99,15 @@ const CATEGORIES = [
 ];
 
 
-// ─── Red navigation arrow (Google Maps–style): points along path direction ───
-function createYouAreHereIcon(headingDeg = null, isDark = false, _travelMode = null) {
+// ─── Stable "you are here" circle (no arrow — same while navigating) ───
+function createYouAreHereIcon(_headingDeg = null, isDark = false, _travelMode = null) {
   const ring = isDark ? "#e2e8f0" : "#ffffff";
-  // No heading yet → solid red dot
-  if (headingDeg == null || Number.isNaN(headingDeg)) {
-    return L.divIcon({
-      className: `custom-marker you-are-here${isDark ? " dark-loc" : ""}`,
-      html: `<div style="width:16px;height:16px;border-radius:50%;background:#E53935;border:2.5px solid ${ring};box-shadow:0 0 0 2px rgba(229,57,53,0.35),0 2px 8px rgba(0,0,0,0.4);"></div>`,
-      iconSize: [16, 16],
-      iconAnchor: [8, 8]
-    });
-  }
-  const rot = Number(headingDeg);
-  // Classic nav arrow: tip points “up” in SVG so rotate() matches travel direction
+  const outer = isDark ? "rgba(229,57,53,0.45)" : "rgba(229,57,53,0.35)";
   return L.divIcon({
-    className: `custom-marker you-are-here heading${isDark ? " dark-loc" : ""}`,
-    html: `<div class="nav-heading-wrap nav-heading-red" style="transform:rotate(${rot}deg);">
-      <svg width="40" height="40" viewBox="0 0 40 40" fill="none" xmlns="http://www.w3.org/2000/svg">
-        <path d="M20 4 L32 32 L20 26 L8 32 Z"
-          fill="#E53935"
-          stroke="#ffffff"
-          stroke-width="2"
-          stroke-linejoin="round"/>
-      </svg>
-    </div>`,
-    iconSize: [40, 40],
-    iconAnchor: [20, 20]
+    className: `custom-marker you-are-here${isDark ? " dark-loc" : ""}`,
+    html: `<div style="width:18px;height:18px;border-radius:50%;background:#E53935;border:2.5px solid ${ring};box-shadow:0 0 0 2px ${outer},0 2px 8px rgba(0,0,0,0.4);"></div>`,
+    iconSize: [18, 18],
+    iconAnchor: [9, 9]
   });
 }
 
@@ -1044,80 +1026,87 @@ function BuildingNameLabels({ buildingsGeo, minZoom = 16 }) {
     0.00000012;
 
   const features = buildingsGeo.features || [];
-  return (
-    <>
-      {features.map((f, i) => {
-        const name = f.properties?.OtherName || f.properties?.Name;
-        if (!name || String(name).trim().length < 2) return null;
-        const geom = f.geometry;
-        if (!geom) return null;
+  // Dedupe by normalized name so the same building is never labeled twice
+  const seenNames = new Set();
+  const labels = [];
 
-        let lat = null;
-        let lng = null;
-        let area = 0;
-        try {
-          if (geom.type === "Polygon") {
-            const ring = geom.coordinates[0];
-            area = approxPolygonArea(ring);
-            let sx = 0, sy = 0, n = Math.max(1, ring.length - 1);
-            for (let j = 0; j < n; j++) {
-              sx += ring[j][0];
-              sy += ring[j][1];
-            }
-            lng = sx / n;
-            lat = sy / n;
-          } else if (geom.type === "MultiPolygon") {
-            let bestRing = null;
-            let bestA = 0;
-            for (const poly of geom.coordinates) {
-              const ring = poly[0];
-              const a = approxPolygonArea(ring);
-              if (a > bestA) {
-                bestA = a;
-                bestRing = ring;
-              }
-            }
-            if (!bestRing) return null;
-            area = bestA;
-            let sx = 0, sy = 0, n = Math.max(1, bestRing.length - 1);
-            for (let j = 0; j < n; j++) {
-              sx += bestRing[j][0];
-              sy += bestRing[j][1];
-            }
-            lng = sx / n;
-            lat = sy / n;
-          } else if (geom.type === "Point") {
-            if (zoom < 18) return null;
-            lng = geom.coordinates[0];
-            lat = geom.coordinates[1];
-            area = minArea + 1;
-          }
-        } catch {
-          return null;
+  for (let i = 0; i < features.length; i++) {
+    const f = features[i];
+    const name = f.properties?.OtherName || f.properties?.Name;
+    if (!name || String(name).trim().length < 2) continue;
+    const nameKey = String(name).trim().toLowerCase();
+    if (seenNames.has(nameKey)) continue;
+
+    const geom = f.geometry;
+    if (!geom) continue;
+
+    let lat = null;
+    let lng = null;
+    let area = 0;
+    try {
+      if (geom.type === "Polygon") {
+        const ring = geom.coordinates[0];
+        area = approxPolygonArea(ring);
+        let sx = 0, sy = 0, n = Math.max(1, ring.length - 1);
+        for (let j = 0; j < n; j++) {
+          sx += ring[j][0];
+          sy += ring[j][1];
         }
-        if (lat == null || lng == null || Number.isNaN(lat) || Number.isNaN(lng)) return null;
-        if (area < minArea) return null;
+        lng = sx / n;
+        lat = sy / n;
+      } else if (geom.type === "MultiPolygon") {
+        let bestRing = null;
+        let bestA = 0;
+        for (const poly of geom.coordinates) {
+          const ring = poly[0];
+          const a = approxPolygonArea(ring);
+          if (a > bestA) {
+            bestA = a;
+            bestRing = ring;
+          }
+        }
+        if (!bestRing) continue;
+        area = bestA;
+        let sx = 0, sy = 0, n = Math.max(1, bestRing.length - 1);
+        for (let j = 0; j < n; j++) {
+          sx += bestRing[j][0];
+          sy += bestRing[j][1];
+        }
+        lng = sx / n;
+        lat = sy / n;
+      } else if (geom.type === "Point") {
+        if (zoom < 18) continue;
+        lng = geom.coordinates[0];
+        lat = geom.coordinates[1];
+        area = minArea + 1;
+      }
+    } catch {
+      continue;
+    }
+    if (lat == null || lng == null || Number.isNaN(lat) || Number.isNaN(lng)) continue;
+    if (area < minArea) continue;
 
-        const label = String(name).replace(/</g, "&lt;").replace(/>/g, "&gt;");
-        const icon = L.divIcon({
-          className: "building-name-label",
-          html: `<span class="building-name-label-text">${label}</span>`,
-          iconSize: [120, 20],
-          iconAnchor: [60, 10]
-        });
-        return (
-          <Marker
-            key={`bl-${f.properties?.Id ?? i}-${name}`}
-            position={[lat, lng]}
-            icon={icon}
-            interactive={false}
-            keyboard={false}
-            zIndexOffset={400}
-          />
-        );
-      })}
-    </>
-  );
+    seenNames.add(nameKey);
+    const label = String(name).replace(/</g, "&lt;").replace(/>/g, "&gt;");
+    const icon = L.divIcon({
+      className: "building-name-label",
+      html: `<span class="building-name-label-text">${label}</span>`,
+      iconSize: [120, 20],
+      iconAnchor: [60, 10]
+    });
+    labels.push(
+      <Marker
+        key={`bl-${nameKey}`}
+        position={[lat, lng]}
+        icon={icon}
+        interactive={false}
+        keyboard={false}
+        zIndexOffset={400}
+      />
+    );
+  }
+
+  return <>{labels}</>;
 }
 
 // ─── ADDED FROM UPDATE: nearby place labels while navigating ───
@@ -3874,14 +3863,7 @@ function App() {
             {buildingsGeo && (
               <BuildingNameLabels buildingsGeo={buildingsGeo} minZoom={16} />
             )}
-            <NearbyPlaceLabels
-              places={places}
-              userPos={useLiveAsFrom ? userPos : null}
-              routeCoords={remainingPath}
-              minZoom={16}
-              maxLabels={14}
-              radiusMeters={180}
-            />
+            {/* NearbyPlaceLabels removed — was duplicating building names next to BuildingNameLabels */}
             {useLiveProgress && progress.closestIdx > 0 && (
               <Polyline
                 positions={route.coords.slice(0, progress.closestIdx + 1)}
@@ -3893,23 +3875,12 @@ function App() {
             {remainingPath?.length > 1 && (
               <Polyline positions={remainingPath} color={ROUTE_BLUE} weight={7} opacity={0.95} />
             )}
-            {/* ─── ADDED FROM UPDATE: direction arrows on the route ─── */}
-            {remainingPath?.length > 1 && steps?.length > 0 && (
-              <RouteDirectionArrows
-                pathCoords={remainingPath}
-                steps={steps}
-                nextStepIndex={navStep}
-                mapBearing={followHeading ? mapBearing : 0}
-              />
-            )}
+            {/* Path direction arrows removed — stable red circle only */}
             {useLiveAsFrom && userPos && (
               <Marker
-                key={`me-${followHeading ? "hu" : Math.round((navHeading ?? -1) / 8)}`}
+                key="me-nav"
                 position={userPos}
-                icon={createYouAreHereIcon(
-                  followHeading ? 0 : navHeading,
-                  theme === "dark"
-                )}
+                icon={createYouAreHereIcon(null, theme === "dark")}
                 zIndexOffset={1000}
               />
             )}
@@ -4945,8 +4916,9 @@ function App() {
             )}
             {userPos && (
               <Marker
+                key="me-live"
                 position={userPos}
-                icon={createYouAreHereIcon(navDisplayHeading, theme === "dark")}
+                icon={createYouAreHereIcon(null, theme === "dark")}
               >
                 <Popup>You are here (live)</Popup>
               </Marker>
