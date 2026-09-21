@@ -33,6 +33,8 @@ input { font-family: inherit; }
 .leaflet-container { height: 100%; width: 100%; z-index: 1; font-family: inherit; }
 .leaflet-control-zoom { border: none !important; box-shadow: var(--shadow) !important; border-radius: 8px !important; overflow: hidden; }
 .leaflet-control-zoom a { width: 36px !important; height: 36px !important; line-height: 36px !important; color: var(--text) !important; background: white !important; }
+
+/* ─── ADDED FROM UPDATE: hardened custom marker styles ─── */
 .custom-marker,
 .leaflet-div-icon.custom-marker,
 .leaflet-marker-icon.custom-marker {
@@ -311,6 +313,7 @@ input { font-family: inherit; }
   border: none;
   cursor: pointer;
 }
+/* ─── ADDED FROM UPDATE: dark mode floating controls ─── */
 [data-theme="dark"] .floating-controls button {
   background: #1e293b !important;
   color: #C7A941 !important;
@@ -838,6 +841,7 @@ input { font-family: inherit; }
   padding: 0 2px;
 }
 
+/* ─── CHANGED FROM UPDATE: instruction card with turn badge layout ─── */
 .nav-instruction-card {
   display: flex;
   align-items: center;
@@ -943,7 +947,7 @@ input { font-family: inherit; }
 }
 .nav-dist { font-size: 24px; font-weight: 700; }
 
-/* Map path / turn direction arrows */
+/* ─── ADDED FROM UPDATE: map path / turn direction arrows ─── */
 .nav-dir-arrow {
   background: transparent !important;
   border: none !important;
@@ -1185,6 +1189,7 @@ input { font-family: inherit; }
   border-radius: 999px;
 }
 
+/* ─── ADDED FROM UPDATE: reroute toast ─── */
 .nav-reroute-toast {
   display: flex;
   align-items: center;
@@ -3400,6 +3405,7 @@ button.stat:hover {
 .rating-star.on {
   color: var(--ul-gold);
 }
+/* ─── ADDED FROM UPDATE: rating tone colours ─── */
 .rating-star.tone-red.on,
 .rating-stars.tone-red .rating-star.on {
   color: #ef4444;
@@ -4016,6 +4022,7 @@ button.stat:hover {
 .auth-submit {
   margin-top: 6px;
 }
+/* ─── ADDED FROM UPDATE: auth loading indicator ─── */
 .auth-loading {
   display: flex;
   align-items: center;
@@ -4039,6 +4046,34 @@ button.stat:hover {
   opacity: 0.7;
   cursor: wait;
 }
+/* Forgot password */
+.auth-text-link {
+  margin: 10px auto 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: transparent;
+  color: var(--ul-navy);
+  font-size: 13px;
+  font-weight: 700;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+.profile-forgot-link {
+  width: 100%;
+}
+.forgot-password-panel h3 {
+  margin: 0 0 8px;
+  font-size: 17px;
+  color: var(--ul-navy);
+}
+.forgot-password-hint {
+  margin: 0 0 12px;
+  font-size: 12px;
+  line-height: 1.45;
+  color: #64748b;
+}
+/*----------*/
 .auth-qr-trigger {
   display: flex;
   align-items: center;
@@ -4141,6 +4176,43 @@ button.stat:hover {
   color: #94a3b8;
   text-align: center;
 }
+
+/*  loading splash */
+.app-loading-splash {
+  position: fixed;
+  inset: 0;
+  z-index: 12000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+}
+.app-loading-splash-bg {
+  position: absolute;
+  inset: 0;
+  background: rgba(15, 23, 42, 0.52);
+  backdrop-filter: blur(4px);
+}
+.app-loading-splash-card {
+  position: relative;
+  z-index: 1;
+  width: 100%;
+  max-width: 320px;
+  padding: 22px 20px;
+  border-radius: 18px;
+  background: #fff;
+  box-shadow: 0 24px 60px rgba(0, 0, 0, 0.35);
+  text-align: center;
+}
+.app-loading-spinner {
+  margin: 14px auto 0;
+}
+.app-loading-text {
+  margin: 8px 0 0;
+  font-size: 13px;
+  color: #64748b;
+}
+
 .auth-landing .profile-msg {
   margin: 0 0 12px;
 }
@@ -4715,7 +4787,21 @@ button.stat:hover {
 [data-theme="dark"] .auth-uni {
   color: var(--text) !important;
 }
-
+/* Forgot password - theme */
+[data-theme="dark"] .auth-text-link {
+  color: #e2e8f0;
+}
+[data-theme="dark"] .forgot-password-panel h3 {
+  color: #f1f5f9;
+}
+[data-theme="dark"] .forgot-password-hint,
+[data-theme="dark"] .app-loading-text {
+  color: #cbd5e1;
+}
+[data-theme="dark"] .app-loading-splash-card {
+  background: #1e293b;
+}
+/*-----*/
 [data-theme="dark"] .auth-tagline {
   color: var(--text-muted) !important;
 }
@@ -4729,16 +4815,20 @@ button.stat:hover {
 
 /* ===== Navigation heading arrow + recenter ===== */
 .nav-heading-wrap {
-  width: 36px;
-  height: 36px;
+  width: 40px;
+  height: 40px;
   display: flex;
   align-items: center;
   justify-content: center;
   transform-origin: 50% 50%;
-  transition: transform 0.35s ease-out;
-  will-change: transform;
+  transition: transform 0.2s ease-out;
   filter: drop-shadow(0 2px 6px rgba(27, 38, 66, 0.35));
+  will-change: transform;
 }
+.nav-heading-wrap.nav-heading-red {
+  filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.45)) drop-shadow(0 3px 8px rgba(229, 57, 53, 0.35));
+}
+/* ─── CHANGED FROM UPDATE: recenter FAB moved up for north FAB ─── */
 .nav-recenter-fab {
   position: absolute;
   right: 14px;
@@ -4756,6 +4846,7 @@ button.stat:hover {
   box-shadow: 0 6px 20px rgba(27, 38, 66, 0.35);
   cursor: pointer;
 }
+/* ─── ADDED FROM UPDATE: heading-up active state ─── */
 .nav-recenter-fab.is-heading-up {
   background: #2563eb;
   color: white;
@@ -4764,6 +4855,7 @@ button.stat:hover {
 .nav-recenter-fab:active {
   transform: scale(0.94);
 }
+/* ─── ADDED FROM UPDATE: north-up FAB ─── */
 .nav-north-fab {
   position: absolute;
   right: 14px;
@@ -4786,6 +4878,7 @@ button.stat:hover {
   font-weight: 800;
   letter-spacing: 0.02em;
 }
+/* ─── CHANGED FROM UPDATE: arrived-fab moved higher to clear FABs ─── */
 .arrived-fab {
   bottom: calc(220px + env(safe-area-inset-bottom)) !important;
 }
@@ -4805,6 +4898,7 @@ button.stat:hover {
   background: transparent !important;
   border: none !important;
 }
+/* ─── CHANGED FROM UPDATE: fixed-width, no translate, 20px line-height ─── */
 .building-name-label-text {
   display: block;
   width: 120px;
@@ -4834,7 +4928,7 @@ button.stat:hover {
   box-shadow: none;
   pointer-events: none;
 }
-/* Place POI labels along the route while navigating (slightly softer than building names) */
+/* ─── ADDED FROM UPDATE: place POI labels along route while navigating ─── */
 .place-name-label-text {
   font-size: 10px;
   font-weight: 600;
@@ -4857,7 +4951,7 @@ button.stat:hover {
 .theme-dark .place-name-label-text {
   color: #e2e8f0;
 }
-/* Keep labels above route polylines while navigating */
+/* ─── ADDED FROM UPDATE: keep labels above route polylines while navigating ─── */
 .nav-map-full .leaflet-marker-pane {
   z-index: 650 !important;
 }
@@ -4999,6 +5093,7 @@ button.stat:hover {
   color: #C7A941 !important;
   box-shadow: 0 6px 20px rgba(0, 0, 0, 0.5) !important;
 }
+/* ─── ADDED FROM UPDATE: dark mode heading-up active state ─── */
 [data-theme="dark"] .nav-recenter-fab.is-heading-up {
   background: #2563eb !important;
   color: #fff !important;
@@ -5275,6 +5370,7 @@ button.stat:hover {
 [data-theme="dark"] .form-group input:focus,
 [data-theme="dark"] .auth-form input:focus,
 [data-theme="dark"] .profile-form-card input:focus,
+[data-theme="dark"] .search-box input:focus,
 [data-theme="dark"] input:focus,
 [data-theme="dark"] textarea:focus,
 [data-theme="dark"] select:focus {
@@ -5285,6 +5381,7 @@ button.stat:hover {
   box-shadow: 0 0 0 3px rgba(199, 169, 65, 0.2) !important;
 }
 
+/* ─── ADDED FROM UPDATE: search box stays transparent in dark ─── */
 [data-theme="dark"] .search-box input,
 [data-theme="dark"] .search-box input:focus {
   background: transparent !important;
@@ -5349,6 +5446,7 @@ button.stat:hover {
   color: #f8fafc !important;
 }
 
+/* ─── CHANGED FROM UPDATE: planner stats dark bg fix ─── */
 [data-theme="dark"] .planner-result.modern .planner-stats {
   background: #1e293b !important;
   color: #f8fafc !important;
@@ -5393,8 +5491,7 @@ button.stat:hover {
   border-color: var(--ul-gold);
 }
 
-
-/* Dark mode — my-location marker contrast (no white leaflet box) */
+/* ─── ADDED FROM UPDATE: dark mode my-location marker contrast (no white leaflet box) ─── */
 [data-theme="dark"] .you-are-here,
 [data-theme="dark"] .you-are-here.dark-loc,
 [data-theme="dark"] .leaflet-div-icon.you-are-here,
@@ -5405,8 +5502,7 @@ button.stat:hover {
   filter: drop-shadow(0 1px 4px rgba(0, 0, 0, 0.65));
 }
 
-
-/* Profile UL logo */
+/* ─── ADDED FROM UPDATE: profile UL logo ─── */
 .profile-header-card.modern {
   position: relative;
 }
@@ -5454,7 +5550,7 @@ button.stat:hover {
   color: #94a3b8;
 }
 
-/* Forgot password */
+/* ─── ADDED FROM UPDATE: forgot password sheet + link ─── */
 .forgot-password-link {
   display: inline-block;
   margin: 4px 0 12px;
@@ -5567,8 +5663,7 @@ button.stat:hover {
   color: #e2e8f0;
 }
 
-
-/* ===== End navigation choice sheet ===== */
+/* ─── ADDED FROM UPDATE: end navigation choice sheet ─── */
 .nav-exit-overlay {
   position: absolute;
   inset: 0;
@@ -5662,6 +5757,7 @@ button.stat:hover {
   color: #e2e8f0;
 }
 
+/* ─── ADDED FROM UPDATE: toasts ─── */
 .app-toast {
   position: fixed;
   left: 50%;

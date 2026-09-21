@@ -10,7 +10,7 @@ import {
   useMap
 } from "react-leaflet";
 import L from "leaflet";
-// Side-effect: extends L.Map with setBearing / rotate (heading-up navigation)
+// ─── ADDED FROM UPDATE: heading-up map rotation support ───
 import "./leaflet-rotate.js";
 import {
   Map as MapIcon,
@@ -80,7 +80,7 @@ const CAMPUS_BBOX = {
   maxLng: 29.750
 };
 
-/** Official campus pedestrian/vehicle gates — routes must enter/exit via these, not over the fence */
+// ─── ADDED FROM UPDATE: official campus gates so routes never jump the fence ───
 const CAMPUS_GATES = [
   { id: "gate1", name: "Gate 1", lat: -23.880749654322596, lng: 29.738532063613796 },
   { id: "gate2", name: "Gate 2", lat: -23.88696312905519, lng: 29.73427853504885 },
@@ -99,66 +99,34 @@ const CATEGORIES = [
 ];
 
 
-function createYouAreHereIcon(headingDeg = null, isDark = false) {
-  const ring = isDark ? "#e2e8f0" : "white";
-  const outer = isDark ? UL_GOLD : UL_NAVY;
-  const pulse = isDark ? "rgba(199,169,65,0.28)" : "rgba(27,38,66,0.18)";
-  // Heading arrow: rotation is applied later on the live DOM node so the marker
-  // stays stable (no remount / no icon HTML replacement) while the user moves.
-  if (headingDeg != null && !Number.isNaN(headingDeg)) {
+// ─── Red navigation arrow (Google Maps–style): points along path direction ───
+function createYouAreHereIcon(headingDeg = null, isDark = false, _travelMode = null) {
+  const ring = isDark ? "#e2e8f0" : "#ffffff";
+  // No heading yet → solid red dot
+  if (headingDeg == null || Number.isNaN(headingDeg)) {
     return L.divIcon({
-      className: `custom-marker you-are-here heading${isDark ? " dark-loc" : ""}`,
-      html: `<div class="nav-heading-wrap" style="transform:rotate(0deg);">
-        <svg width="36" height="36" viewBox="0 0 36 36" fill="none" xmlns="http://www.w3.org/2000/svg">
-          <circle cx="18" cy="18" r="16" fill="${pulse}"/>
-          <path d="M18 4 L28 28 L18 23 L8 28 Z" fill="${UL_GOLD}" stroke="${isDark ? ring : UL_NAVY}" stroke-width="1.5" stroke-linejoin="round"/>
-        </svg>
-      </div>`,
-      iconSize: [36, 36],
-      iconAnchor: [18, 18]
+      className: `custom-marker you-are-here${isDark ? " dark-loc" : ""}`,
+      html: `<div style="width:16px;height:16px;border-radius:50%;background:#E53935;border:2.5px solid ${ring};box-shadow:0 0 0 2px rgba(229,57,53,0.35),0 2px 8px rgba(0,0,0,0.4);"></div>`,
+      iconSize: [16, 16],
+      iconAnchor: [8, 8]
     });
   }
+  const rot = Number(headingDeg);
+  // Classic nav arrow: tip points “up” in SVG so rotate() matches travel direction
   return L.divIcon({
-    className: `custom-marker you-are-here${isDark ? " dark-loc" : ""}`,
-    html: `<div style="width:18px;height:18px;border-radius:50%;background:${UL_GOLD};border:2.5px solid ${ring};box-shadow:0 0 0 2px ${outer},0 2px 8px rgba(0,0,0,0.45);"></div>`,
-    iconSize: [18, 18],
-    iconAnchor: [9, 9]
+    className: `custom-marker you-are-here heading${isDark ? " dark-loc" : ""}`,
+    html: `<div class="nav-heading-wrap nav-heading-red" style="transform:rotate(${rot}deg);">
+      <svg width="40" height="40" viewBox="0 0 40 40" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <path d="M20 4 L32 32 L20 26 L8 32 Z"
+          fill="#E53935"
+          stroke="#ffffff"
+          stroke-width="2"
+          stroke-linejoin="round"/>
+      </svg>
+    </div>`,
+    iconSize: [40, 40],
+    iconAnchor: [20, 20]
   });
-}
-
-/** Stable user-location marker: same Leaflet Marker instance, only CSS transform updates. */
-function YouAreHereMarker({ position, heading, isDark = false, followHeading = false, zIndexOffset = 1000, children }) {
-  const markerRef = useRef(null);
-  // One stable icon for arrow mode; only switch icon when going between circle <-> arrow
-  const hasHeading = heading != null && !Number.isNaN(heading);
-  const icon = useMemo(
-    () => createYouAreHereIcon(hasHeading ? 0 : null, isDark),
-    [hasHeading, isDark]
-  );
-
-  useEffect(() => {
-    const marker = markerRef.current;
-    if (!marker) return;
-    const el = marker.getElement?.() || marker._icon;
-    if (!el) return;
-    const wrap = el.querySelector(".nav-heading-wrap");
-    if (!wrap) return;
-    // Heading-up: arrow always points to top of screen (map is already rotated).
-    // North-up: arrow rotates with absolute heading.
-    const rot = followHeading ? 0 : (Number(heading) || 0);
-    wrap.style.transform = `rotate(${rot}deg)`;
-  }, [heading, followHeading, hasHeading]);
-
-  return (
-    <Marker
-      ref={markerRef}
-      position={position}
-      icon={icon}
-      zIndexOffset={zIndexOffset}
-    >
-      {children}
-    </Marker>
-  );
 }
 
 const CATEGORY_COLORS = {
@@ -337,6 +305,7 @@ function nearestNode(latlng, nodes) {
   return { key: best, dist: bestD };
 }
 
+// ─── ADDED FROM UPDATE: nearest gate helper ───
 function nearestGate(latlng) {
   let best = CAMPUS_GATES[0];
   let bestD = Infinity;
@@ -350,7 +319,7 @@ function nearestGate(latlng) {
   return { gate: best, dist: bestD };
 }
 
-/** Merge two route results end-to-end (shared join point deduped). */
+// ─── ADDED FROM UPDATE: merge two route legs into one ───
 function mergeRouteParts(partA, partB, joinInstruction = null) {
   if (!partA?.coords?.length) return partB;
   if (!partB?.coords?.length) return partA;
@@ -419,6 +388,7 @@ function turnType(prevBrng, nextBrng) {
   return { type: delta > 0 ? "sharp-right" : "sharp-left", phrase: delta > 0 ? "Sharp right" : "Sharp left" };
 }
 
+// ─── buildStepsFromPath: includes lat/lng/bearing on each step (from update) ───
 function buildStepsFromPath(coords, destinationName) {
   if (!coords || coords.length < 2) {
     return [{ instruction: `Head to ${destinationName}`, distance: 0, type: "depart" }];
@@ -507,12 +477,12 @@ function buildStepsFromPath(coords, destinationName) {
   return steps;
 }
 
-/** Place chevron arrows along a path for direction guidance. */
+// ─── ADDED FROM UPDATE: chevron arrows along the path ───
 function buildPathArrows(coords, spacingMeters = 55) {
   if (!coords || coords.length < 2) return [];
   const arrows = [];
   let accumulated = 0;
-  let nextAt = spacingMeters * 0.4; // first arrow a bit after start
+  let nextAt = spacingMeters * 0.4;
   for (let i = 0; i < coords.length - 1; i++) {
     const a = coords[i];
     const b = coords[i + 1];
@@ -531,13 +501,11 @@ function buildPathArrows(coords, spacingMeters = 55) {
   return arrows;
 }
 
-/** SVG chevron / turn arrow. `mapBearing` compensates for heading-up map rotation. */
+// ─── ADDED FROM UPDATE: SVG direction arrow icon ───
 function createDirectionArrowIcon(bearingDeg, { emphasize = false, turnType = null, mapBearing = 0 } = {}) {
-  // Relative to map so arrows stay correct when the map itself is rotated
   const rot = ((Number(bearingDeg) || 0) - (Number(mapBearing) || 0) + 360) % 360;
   const size = emphasize ? 36 : 22;
   let pathSvg;
-  // Turn-specific shapes for next-step emphasis; default is forward chevron
   if (turnType === "left" || turnType === "slight-left" || turnType === "sharp-left") {
     pathSvg = `<path d="M20 6 L8 16 L20 26 L20 20 L28 20 L28 12 L20 12 Z" fill="white"/>`;
   } else if (turnType === "right" || turnType === "slight-right" || turnType === "sharp-right") {
@@ -545,7 +513,6 @@ function createDirectionArrowIcon(bearingDeg, { emphasize = false, turnType = nu
   } else if (turnType === "arrive") {
     pathSvg = `<circle cx="16" cy="16" r="8" fill="white"/><circle cx="16" cy="16" r="3.5" fill="#2563eb"/>`;
   } else {
-    // Forward chevron
     pathSvg = `<path d="M16 5 L26 15 L21 15 L21 27 L11 27 L11 15 L6 15 Z" fill="white"/>`;
   }
   const bg = emphasize ? "#1d4ed8" : "#2563eb";
@@ -562,7 +529,7 @@ function createDirectionArrowIcon(bearingDeg, { emphasize = false, turnType = nu
   });
 }
 
-/** Map Lucide-style turn type to a short label for the instruction card. */
+// ─── ADDED FROM UPDATE: turn icon label for instruction card ───
 function turnIconLabel(type) {
   switch (type) {
     case "left":
@@ -600,6 +567,7 @@ function routeOnCampusGraph(fromLatLng, toLatLng, graphData, accessibleOnly, tra
   }
   const start = nearestNode(fromLatLng, nodes);
   const end = nearestNode(toLatLng, nodes);
+  // ─── CHANGED FROM UPDATE: tighter snap for walking ───
   const maxSnap = travelMode === "driving" ? 350 : 90;
   if (!start.key || !end.key || start.dist > maxSnap || end.dist > maxSnap) return null;
 
@@ -690,12 +658,13 @@ async function routeOSRM(fromLatLng, toLatLng, travelMode = "walking") {
           else if (type === "new name" || type === "continue") instruction = s.name ? `Continue on ${s.name}` : "Continue straight";
           else instruction = s.name ? `Continue on ${s.name}` : "Continue";
         }
-        // Normalize OSRM turn types to match on-map arrow shapes
+        // ─── ADDED FROM UPDATE: normalize OSRM turn types to match arrow shapes ───
         if (type === "turn" || type === "end of road" || type === "fork" || type === "off ramp" || type === "roundabout") {
           if (modifier.includes("left")) type = modifier.includes("sharp") ? "sharp-left" : modifier.includes("slight") ? "slight-left" : "left";
           else if (modifier.includes("right")) type = modifier.includes("sharp") ? "sharp-right" : modifier.includes("slight") ? "slight-right" : "right";
           else type = "straight";
         }
+        // ─── ADDED FROM UPDATE: capture step location + bearing for arrows ───
         const loc = m.location; // [lng, lat]
         const stepCoords = (s.geometry?.coordinates || []).map((c) => [c[1], c[0]]);
         let brng = typeof m.bearing_after === "number" ? m.bearing_after : null;
@@ -728,6 +697,7 @@ async function routeOSRM(fromLatLng, toLatLng, travelMode = "walking") {
   }
 }
 
+// ─── hybridRoute: kept original + added gate-aware logic from update ───
 async function hybridRoute(fromLatLng, toLatLng, graphData, accessibleOnly, destinationName = "destination", travelMode = "walking") {
   const fromIn = isInsideCampus(fromLatLng);
   const toIn = isInsideCampus(toLatLng);
@@ -755,6 +725,7 @@ async function hybridRoute(fromLatLng, toLatLng, graphData, accessibleOnly, dest
     return result;
   };
 
+  // ─── ADDED FROM UPDATE: simpleLeg fallback ───
   const simpleLeg = (a, b, instruction) => {
     const dist = Math.round(haversine(a, b));
     return {
@@ -771,7 +742,7 @@ async function hybridRoute(fromLatLng, toLatLng, graphData, accessibleOnly, dest
     };
   };
 
-  // Enter campus via nearest gate (do not jump the fence)
+  // ─── ADDED FROM UPDATE: enter campus via nearest gate ───
   if (travelMode === "walking" && !fromIn && toIn && graphData) {
     const { gate } = nearestGate(fromLatLng);
     const gateLL = [gate.lat, gate.lng];
@@ -780,16 +751,12 @@ async function hybridRoute(fromLatLng, toLatLng, graphData, accessibleOnly, dest
     const onCampus = routeOnCampusGraph(gateLL, toLatLng, graphData, accessibleOnly, travelMode);
     if (onCampus) {
       const campusPart = withNamedSteps(onCampus);
-      const merged = mergeRouteParts(
-        toGate,
-        campusPart,
-        `Enter campus via ${gate.name}`
-      );
+      const merged = mergeRouteParts(toGate, campusPart, `Enter campus via ${gate.name}`);
       return withNamedSteps(merged);
     }
   }
 
-  // Leave campus via nearest gate
+  // ─── ADDED FROM UPDATE: leave campus via nearest gate ───
   if (travelMode === "walking" && fromIn && !toIn && graphData) {
     const { gate } = nearestGate(toLatLng);
     const gateLL = [gate.lat, gate.lng];
@@ -798,11 +765,7 @@ async function hybridRoute(fromLatLng, toLatLng, graphData, accessibleOnly, dest
       let fromGate = withNamedSteps(await routeOSRM(gateLL, toLatLng, "walking"));
       if (!fromGate) fromGate = simpleLeg(gateLL, toLatLng, `Leave campus via ${gate.name}`);
       const campusPart = withNamedSteps(onCampus);
-      const merged = mergeRouteParts(
-        campusPart,
-        fromGate,
-        `Exit campus via ${gate.name}`
-      );
+      const merged = mergeRouteParts(campusPart, fromGate, `Exit campus via ${gate.name}`);
       return withNamedSteps(merged);
     }
   }
@@ -813,7 +776,7 @@ async function hybridRoute(fromLatLng, toLatLng, graphData, accessibleOnly, dest
     );
     if (campus) return campus;
 
-    // Graph failed — still avoid a straight line over fences: go via nearest gate as a waypoint
+    // ─── ADDED FROM UPDATE: gate waypoint fallback when graph fails ───
     if (travelMode === "walking" && graphData) {
       const { gate } = nearestGate(fromLatLng);
       const gateLL = [gate.lat, gate.lng];
@@ -826,7 +789,7 @@ async function hybridRoute(fromLatLng, toLatLng, graphData, accessibleOnly, dest
       }
     }
 
-    // Prefer real roads/paths (OSRM) over a straight line across campus
+    // ─── ADDED FROM UPDATE: prefer OSRM over straight line across campus ───
     const osrmCampus = withNamedSteps(await routeOSRM(fromLatLng, toLatLng, travelMode));
     if (osrmCampus) return osrmCampus;
   }
@@ -861,13 +824,12 @@ function RecenterMap({ center, zoom, once }) {
   return null;
 }
 
+// ─── CHANGED FROM UPDATE: only pan after initial engage, never force zoom ───
 function LiveLocationController({ position, follow, zoomIn = false, heading = null }) {
   const map = useMap();
   const didInitial = useRef(false);
   useEffect(() => {
     if (!follow || !position) return;
-    // Only centre (and optionally nudge zoom once) on first engage.
-    // After that, only pan — never force zoom, so pinch / scroll stay free.
     if (!didInitial.current) {
       const currentZoom = map.getZoom();
       const targetZoom =
@@ -884,11 +846,7 @@ function LiveLocationController({ position, follow, zoomIn = false, heading = nu
   return null;
 }
 
-/**
- * Disable follow mode when the user pans the map (drag).
- * Pinch / scroll zoom are left alone: LiveLocationController only pans
- * after the initial centre, so zoom level stays under user control.
- */
+// ─── ADDED FROM UPDATE: disable follow when user drags the map ───
 function StopFollowOnInteract({ active, onInteract }) {
   const map = useMap();
   useEffect(() => {
@@ -902,18 +860,39 @@ function StopFollowOnInteract({ active, onInteract }) {
   return null;
 }
 
-/** Direction arrows along the remaining path + emphasized next-turn marker. */
+// ─── ADDED FROM UPDATE: direction arrows along route + next-turn marker ───
 function RouteDirectionArrows({ pathCoords, steps, nextStepIndex = 0, mapBearing = 0 }) {
-  // Path direction arrows (blue chevrons along the route) removed — no longer needed.
-  // Only keep emphasized next-turn markers if desired; currently disabled as well for clean map.
+  const pathArrows = useMemo(
+    () => buildPathArrows(pathCoords, 60),
+    [pathCoords]
+  );
+
   const nextStep = steps?.[Math.min(nextStepIndex, Math.max(0, (steps?.length || 1) - 1))];
   const turnArrows = useMemo(() => {
-    // Disabled: return empty so no blue direction/turn arrows appear on the map
-    return [];
+    if (!steps?.length) return [];
+    return steps
+      .filter((s) => s.lat != null && s.lng != null && s.type !== "depart")
+      .map((s) => ({
+        lat: s.lat,
+        lng: s.lng,
+        bearing: s.bearing ?? 0,
+        type: s.type,
+        isNext: s === nextStep || (nextStep && s.type === nextStep.type && s.lat === nextStep.lat)
+      }));
   }, [steps, nextStep]);
 
   return (
     <>
+      {pathArrows.map((a, i) => (
+        <Marker
+          key={`pa-${i}-${a.lat.toFixed(5)}`}
+          position={[a.lat, a.lng]}
+          icon={createDirectionArrowIcon(a.bearing, { emphasize: false, mapBearing })}
+          interactive={false}
+          keyboard={false}
+          zIndexOffset={200}
+        />
+      ))}
       {turnArrows.map((t, i) => (
         <Marker
           key={`ta-${i}-${t.lat.toFixed(5)}-${t.type}`}
@@ -932,11 +911,7 @@ function RouteDirectionArrows({ pathCoords, steps, nextStepIndex = 0, mapBearing
   );
 }
 
-/**
- * Heading-up: rotate the map so the direction of travel is at the top.
- * Stops following heading when the user rotates the map manually.
- * Reports current bearing via onBearingChange for arrow compensation.
- */
+// ─── ADDED FROM UPDATE: heading-up map rotation controller ───
 function HeadingUpController({ heading, enabled, onUserRotate, onBearingChange, lockNorth = false }) {
   const map = useMap();
   const programmatic = useRef(false);
@@ -946,7 +921,6 @@ function HeadingUpController({ heading, enabled, onUserRotate, onBearingChange, 
   useEffect(() => {
     if (!map || typeof map.setBearing !== "function") return;
     if (!enabled || heading == null || Number.isNaN(heading)) return;
-    // Avoid tiny jitter
     if (lastHeading.current != null && Math.abs(((heading - lastHeading.current + 540) % 360) - 180) < 2) return;
     lastHeading.current = heading;
     programmatic.current = true;
@@ -983,7 +957,6 @@ function HeadingUpController({ heading, enabled, onUserRotate, onBearingChange, 
     };
   }, [map, onUserRotate, onBearingChange]);
 
-  // North-up when heading-up is turned off (or explicit lockNorth)
   useEffect(() => {
     if (!map || typeof map.setBearing !== "function") return;
     if (!enabled || lockNorth) {
@@ -1044,13 +1017,13 @@ function approxPolygonArea(coords) {
 /**
  * Building name labels — only appear when zoomed in, and only for buildings
  * large enough at the current zoom (avoids clutter).
+ * ─── CHANGED FROM UPDATE: default minZoom 16, lighter area thresholds, non-zero icon size ───
  */
 function BuildingNameLabels({ buildingsGeo, minZoom = 16 }) {
   const map = useMap();
   const [zoom, setZoom] = useState(() => map.getZoom());
   useEffect(() => {
     const onZoom = () => setZoom(map.getZoom());
-    // Sync immediately in case map zoom changed before listener attached
     setZoom(map.getZoom());
     map.on("zoomend", onZoom);
     map.on("zoom", onZoom);
@@ -1064,7 +1037,6 @@ function BuildingNameLabels({ buildingsGeo, minZoom = 16 }) {
 
   if (!buildingsGeo || zoom < minZoom) return null;
 
-  // Lower thresholds so more building names appear while navigating
   const minArea =
     zoom >= 19 ? 0 :
     zoom >= 18 ? 0.00000002 :
@@ -1127,7 +1099,6 @@ function BuildingNameLabels({ buildingsGeo, minZoom = 16 }) {
         if (area < minArea) return null;
 
         const label = String(name).replace(/</g, "&lt;").replace(/>/g, "&gt;");
-        // Non-zero icon size so Leaflet positions the label reliably
         const icon = L.divIcon({
           className: "building-name-label",
           html: `<span class="building-name-label-text">${label}</span>`,
@@ -1149,10 +1120,7 @@ function BuildingNameLabels({ buildingsGeo, minZoom = 16 }) {
   );
 }
 
-/**
- * Place name labels near the user / remaining route while navigating.
- * Only when zoomed in; limited to closest places to avoid clutter.
- */
+// ─── ADDED FROM UPDATE: nearby place labels while navigating ───
 function NearbyPlaceLabels({
   places = [],
   userPos = null,
@@ -1193,7 +1161,6 @@ function NearbyPlaceLabels({
       if (last) best = Math.min(best, haversine(last, p));
       if (best <= radiusMeters) return best;
     }
-    // If no user/route filter, show places in current map bounds when zoomed in
     if (!userPos && (!routeCoords || routeCoords.length < 2)) {
       try {
         const b = map.getBounds();
@@ -1296,6 +1263,7 @@ function App() {
   const [modePromptIntent, setModePromptIntent] = useState("plan"); // "plan" | "navigate"
 
   const [view, setView] = useState("map");
+  // ─── CHANGED FROM UPDATE: accessibility default false ───
   const [accessibilityOn, setAccessibilityOn] = useState(false);
   const [theme, setTheme] = useState(() => {
     try {
@@ -1340,11 +1308,13 @@ function App() {
   const [ratingValue, setRatingValue] = useState(0);
   const [ratingComplaint, setRatingComplaint] = useState("");
   const [ratingRouteInfo, setRatingRouteInfo] = useState(null);
+  // ─── ADDED FROM UPDATE: rating success toast ───
   const [ratingSuccess, setRatingSuccess] = useState("");
   const [adminTab, setAdminTab] = useState("overview");
   const [editingEvent, setEditingEvent] = useState(null);
   const arrivedTriggeredRef = useRef(false);
   const [nearDestination, setNearDestination] = useState(false);
+  // ─── ADDED FROM UPDATE: rerouting indicator + auth loading + forgot password + nav exit sheet + nav toast ───
   const [isRerouting, setIsRerouting] = useState(false);
   const [authLoading, setAuthLoading] = useState(false);
   const [showForgotPassword, setShowForgotPassword] = useState(false);
@@ -1363,7 +1333,7 @@ function App() {
   const [userPos, setUserPos] = useState(null);
   const [geoError, setGeoError] = useState(null);
   const [followUser, setFollowUser] = useState(false);
-  /** When true during navigation, map rotates so travel direction is at the top (heading-up). */
+  // ─── ADDED FROM UPDATE: heading-up state ───
   const [followHeading, setFollowHeading] = useState(true);
   const [mapBearing, setMapBearing] = useState(0);
   const [userHeading, setUserHeading] = useState(null);
@@ -1389,6 +1359,11 @@ function App() {
   const [showPassword, setShowPassword] = useState(false);
   const [showQrPopup, setShowQrPopup] = useState(false);
   const [bootstrapping, setBootstrapping] = useState(() => !!getToken());
+  // ─── KEPT FROM ORIGINAL: page loading splash + active route id ───
+  const [pageLoading, setPageLoading] = useState(false);
+  const pageLoadingTimer = useRef(null);
+  const previousViewForLoading = useRef(view);
+  const [activeRouteId, setActiveRouteId] = useState(null);
 
   const emptyProfileForm = (role = "student") => ({
     role,
@@ -1402,6 +1377,49 @@ function App() {
     password: "",
     confirmPassword: ""
   });
+
+  /*-- SPLASH LOGIC SCREEN  --*/
+  const showPageLoadingSplash = useCallback(async (promiseOrMs, delayMs = 250, minVisibleMs = 200) => {
+    if (pageLoadingTimer.current) {
+      clearTimeout(pageLoadingTimer.current);
+      pageLoadingTimer.current = null;
+    }
+
+    let splashVisible = false;
+    const showTimer = setTimeout(() => {
+      splashVisible = true;
+      setPageLoading(true);
+    }, delayMs);
+
+    const startedAt = Date.now();
+
+    try {
+      if (promiseOrMs && typeof promiseOrMs.then === "function") {
+        await promiseOrMs;
+      } else {
+        const ms = typeof promiseOrMs === "number" ? promiseOrMs : 0;
+        if (ms > 0) await new Promise((r) => setTimeout(r, ms));
+      }
+    } catch {
+      // Swallow — caller handles
+    }
+
+    clearTimeout(showTimer);
+
+    if (!splashVisible) {
+      return;
+    }
+
+    const visibleFor = Date.now() - (startedAt + delayMs);
+    const remaining = Math.max(0, minVisibleMs - visibleFor);
+    if (remaining > 0) {
+      await new Promise((resolve) => {
+        pageLoadingTimer.current = setTimeout(resolve, remaining);
+      });
+    }
+
+    setPageLoading(false);
+  }, []);
 
   const isStrongPassword = (pwd) => {
     if (!pwd || pwd.length < 8) return false;
@@ -1422,6 +1440,7 @@ function App() {
 
   const isValidStudentNumber = (sn) => /^20\d{7,9}$/.test(sn) || /^\d{8,10}$/.test(sn);
 
+  // ─── KEPT FROM ORIGINAL: admin id validator ───
   const isValidAdminId = (id) => /^[A-Z0-9]{4,16}$/.test(id);
 
   const isValidFullName = (name) => {
@@ -1431,6 +1450,7 @@ function App() {
 
   const accountKey = (role, id) => `${role}:${(id || "").trim().toUpperCase()}`;
 
+  // ─── KEPT FROM ORIGINAL: localStorage account helpers ───
   const loadAccounts = () => {
     try {
       const raw = localStorage.getItem("ul_nav_accounts");
@@ -1448,6 +1468,13 @@ function App() {
       localStorage.setItem("ul_nav_accounts", JSON.stringify(accounts));
     } catch { /* ignore */ }
   };
+
+  useEffect(() => {
+    // Pre-warm free-tier backend (fire-and-forget)
+    fetch(`${import.meta.env.VITE_API_URL || "http://localhost:3000"}/health`, {
+      method: "GET",
+    }).catch(() => {});
+  }, []);
 
   useEffect(() => {
     const onResize = () => setIsMobile(window.innerWidth < 768);
@@ -1583,6 +1610,68 @@ function App() {
     setProfileMessage("");
   }, [view, userProfile]);
 
+  /* ---- SPLASH LOADING ----- */
+  useEffect(() => {
+    if (bootstrapping) return;
+
+    const previousView = previousViewForLoading.current;
+    if (previousView === view) return;
+
+    let loadPromise = null;
+
+    if (view === "events") {
+      loadPromise = api.getEvents({ upcoming: true, limit: 100 })
+        .then((res) => setCampusEvents(res.data || []))
+        .catch((err) => {
+          console.warn('[events] Failed to load:', err.message);
+          setCampusEvents([]);
+        });
+    }
+
+    if (view === "favourites") {
+      loadPromise = api.getFavourites()
+        .then((res) => {
+          setFavourites(
+            (res.data || []).map((p) => p.slug || p.id).filter(Boolean)
+          );
+        })
+        .catch((err) => {
+          console.warn('[favourites] Failed to load:', err.message);
+        });
+    }
+
+    if (view === "profile") {
+      loadPromise = Promise.all([
+        api.getProfile().catch((err) => {
+          console.warn('[profile] Failed to load:', err.message);
+          return null;
+        }),
+        api.getFavourites().catch(() => ({ data: [] })),
+      ]).then(([profileRes, favRes]) => {
+        if (profileRes?.data) setUserProfile(profileRes.data);
+        if (favRes?.data) {
+          setFavourites(
+            (favRes.data || []).map((p) => p.slug || p.id).filter(Boolean)
+          );
+        }
+      });
+    }
+
+    if (view === "map" || view === "route") {
+      loadPromise = new Promise((resolve) => setTimeout(resolve, 400));
+    }
+
+    previousViewForLoading.current = view;
+
+    if (loadPromise) {
+      showPageLoadingSplash(loadPromise);
+    }
+  }, [view, bootstrapping, showPageLoadingSplash]);
+
+  useEffect(() => () => {
+    if (pageLoadingTimer.current) clearTimeout(pageLoadingTimer.current);
+  }, []);
+
   // RESTORE SESSION PROFILE FROM TOKEN ON APP LOAD
   useEffect(() => {
     const token = getToken();
@@ -1636,8 +1725,6 @@ function App() {
       setFavourites((prev) =>
         isFav ? [...prev, placeId] : prev.filter((id) => id !== placeId)
       );
-      //console.error('Favourite toggle failed:', err.message);
-      // Optional: show a message to the user
       setProfileMessage('Could not update favourite. Please try again.');
     }
   }, [favourites]);
@@ -1647,7 +1734,7 @@ function App() {
     [places, favourites]
   );
 
-  // GUEST HANDLER — backend integrated
+  // GUEST HANDLER — backend integrated (+ authLoading from update)
   const handleGuestContinue = async () => {
     const fullName = (profileForm.fullName || "").trim();
     const phone = (profileForm.phone || "").trim();
@@ -1669,28 +1756,28 @@ function App() {
       setProfileMessage("Enter a valid email address.");
       return;
     }
+  
 
-    setAuthLoading(true);
-    setProfileMessage("");
-    try {
+    // ─── CHANGED: restore original full-screen branded splash ───
+    const guestPromise = (async () => {
       const res = await api.guest({ fullName, phone, email });
       setToken(res.data.accessToken);
       setUserProfile(res.data.profile);
-
-      // Guests start with no favourites, but keep the flow consistent
       setFavourites([]);
-
       setProfileMode("view");
       setProfileMessage("Welcome, guest!");
       setView("map");
+    })();
+
+    try {
+      await showPageLoadingSplash(guestPromise, 380);
     } catch (err) {
       setProfileMessage(err.message || "Could not start guest session. Please try again.");
-    } finally {
-      setAuthLoading(false);
     }
   };
 
-  // REGISTRATION HANDLER — backend integrated
+  // REGISTRATION HANDLER — backend integrated (restored original splash)
+  // REGISTRATION HANDLER — backend integrated (restored original splash)
   const handleRegister = async () => {
     const sn = (profileForm.studentNumber || "").trim().toUpperCase();
     const fullName = (profileForm.fullName || "").trim();
@@ -1699,47 +1786,26 @@ function App() {
     const password = profileForm.password || "";
     const confirmPassword = profileForm.confirmPassword || "";
 
-    if (!isValidStudentNumber(sn)) {
-      setProfileMessage("Enter a valid student number (e.g. 202012345 — 8 to 11 digits).");
-      return;
-    }
-    if (!isValidFullName(fullName)) {
-      setProfileMessage("Enter a valid full name (letters only, at least 2 characters).");
-      return;
-    }
-    if (!email || !isValidEmail(email)) {
-      setProfileMessage("Enter a valid email address (e.g. name@ul.ac.za).");
-      return;
-    }
-    if (phone && !isValidPhone(phone)) {
-      setProfileMessage("Enter a valid phone number (10–15 digits).");
-      return;
-    }
-    if (!isStrongPassword(password)) {
-      setProfileMessage(
-        "Password must be 8+ characters with uppercase, lowercase, a number, and a special character."
-      );
-      return;
-    }
-    if (password !== confirmPassword) {
-      setProfileMessage("Passwords do not match.");
-      return;
-    }
+    if (!isValidStudentNumber(sn)) { setProfileMessage("Enter a valid student number (e.g. 202012345 — 8 to 11 digits)."); return; }
+    if (!isValidFullName(fullName)) { setProfileMessage("Enter a valid full name (letters only, at least 2 characters)."); return; }
+    if (!email || !isValidEmail(email)) { setProfileMessage("Enter a valid email address (e.g. name@ul.ac.za)."); return; }
+    if (phone && !isValidPhone(phone)) { setProfileMessage("Enter a valid phone number (10–15 digits)."); return; }
+    if (!isStrongPassword(password)) { setProfileMessage("Password must be 8+ characters with uppercase, lowercase, a number, and a special character."); return; }
+    if (password !== confirmPassword) { setProfileMessage("Passwords do not match."); return; }
 
-    setAuthLoading(true);
-    setProfileMessage("");
+    const registerPromise = api.register({
+      studentNumber: sn,
+      fullName,
+      email,
+      phone,
+      password,
+      confirmPassword,
+      faculty: profileForm.faculty || "",
+      yearOfStudy: profileForm.yearOfStudy || "",
+    });
+
     try {
-      await api.register({
-        studentNumber: sn,
-        fullName,
-        email,
-        phone,
-        password,
-        confirmPassword,
-        faculty: profileForm.faculty || "",
-        yearOfStudy: profileForm.yearOfStudy || "",
-      });
-
+      await showPageLoadingSplash(registerPromise, 380);
       setProfileMessage("Account created. Login to continue.");
       setProfileMode("login");
       setProfileForm((f) => ({ ...f, password: "", confirmPassword: "" }));
@@ -1750,12 +1816,10 @@ function App() {
       } else {
         setProfileMessage(err.message || "Registration failed. Please try again.");
       }
-    } finally {
-      setAuthLoading(false);
     }
   };
-
-  // LOGIN HANDLER — backend integrated
+  
+  // LOGIN HANDLER — backend integrated (restored original splash)
   const handleLogin = async () => {
     const sn = (profileForm.studentNumber || "").trim().toUpperCase();
     const password = profileForm.password || "";
@@ -1769,14 +1833,11 @@ function App() {
       return;
     }
 
-    setAuthLoading(true);
-    setProfileMessage("");
-    try {
+    // ─── CHANGED: restore original full-screen branded splash ───
+    const loginPromise = (async () => {
       const res = await api.login({ studentNumber: sn, password });
       setToken(res.data.accessToken);
-      setUserProfile(res.data.profile);
 
-      // Fetch the freshest profile and favourites together
       const [profileRes, favRes] = await Promise.all([
         api.me(),
         api.getFavourites(),
@@ -1784,14 +1845,16 @@ function App() {
 
       setUserProfile(profileRes.data);
       setFavourites(
-        (favRes.data || [])
-          .map((p) => p.slug || p.id)
-          .filter(Boolean)
+        (favRes.data || []).map((p) => p.slug || p.id).filter(Boolean)
       );
       setProfileMode("view");
       setView("map");
       setProfileMessage("Welcome back!");
       setProfileForm((f) => ({ ...f, password: "" }));
+    })();
+
+    try {
+      await showPageLoadingSplash(loginPromise, 380);
     } catch (err) {
       if (err.status === 401) {
         setProfileMessage("Incorrect student number or password.");
@@ -1800,8 +1863,40 @@ function App() {
       } else {
         setProfileMessage(err.message || "Login failed. Please try again.");
       }
-    } finally {
-      setAuthLoading(false);
+    }
+  };
+
+  // ─── KEPT FROM ORIGINAL: forgot password handler (backend integrated) ───
+  const handleForgotPassword = async () => {
+    const sn = (profileForm.studentNumber || "").trim().toUpperCase();
+    const email = (profileForm.email || "").trim().toLowerCase();
+
+    if (!sn && !email) {
+      setProfileMessage("Enter your student number or email address.");
+      return;
+    }
+    if (sn && !isValidStudentNumber(sn)) {
+      setProfileMessage("Enter a valid student number.");
+      return;
+    }
+    if (email && !isValidEmail(email)) {
+      setProfileMessage("Enter a valid email address.");
+      return;
+    }
+
+    const forgotPromise = api.forgotPassword({
+      studentNumber: sn || undefined,
+      email: email || undefined,
+      resetRedirectTo: typeof window !== "undefined" ? window.location.origin : undefined,
+    });
+
+    try {
+      await showPageLoadingSplash(forgotPromise, 380);
+      setProfileMessage("If an account exists, reset instructions have been sent.");
+      setProfileMode("login");
+      setProfileForm((f) => ({ ...f, password: "", confirmPassword: "" }));
+    } catch (err) {
+      setProfileMessage(err.message || "Could not process your request. Please try again.");
     }
   };
 
@@ -1845,16 +1940,12 @@ function App() {
     }
   };
 
-  // LOGOUT HANDLER  backend integrated
-  const handleLogout = async () => {
-    try {
-      await api.logout();
-    } catch {
-      // Ignore errors on logout
-    }
+  // ─── LOGOUT: instant local cleanup, server revoke in background (from original) ───
+  const handleLogout = () => {
+    api.logout().catch(() => {});
     clearToken();
     setUserProfile(null);
-    setFavourites([]);       
+    setFavourites([]);
     setProfileForm(emptyProfileForm("student"));
     setProfileMode("login");
     setProfileMessage("You have been signed out.");
@@ -1866,10 +1957,12 @@ function App() {
     setRatingRouteInfo(routeInfo || null);
     setRatingValue(0);
     setRatingComplaint("");
+    // ─── ADDED FROM UPDATE: reset success toast ───
     setRatingSuccess("");
     setShowRating(true);
   };
 
+  // ─── CHANGED FROM UPDATE: written feedback required for ALL ratings ───
   const MIN_FEEDBACK_LEN = 5;
 
   const submitRating = (forcedValue = null, forcedComplaint = null) => {
@@ -1878,7 +1971,6 @@ function App() {
     if (!value) {
       return;
     }
-    // Written feedback required for every rating (1–5)
     if (complaintText.length < MIN_FEEDBACK_LEN) {
       return;
     }
@@ -1893,35 +1985,65 @@ function App() {
       userRole: userProfile?.role || "guest",
       at: new Date().toISOString()
     };
+
+    // 1. Update local state instantly
     setUserFeedback((prev) => [entry, ...prev].slice(0, 200));
     setShowRating(false);
     setRatingValue(0);
     setRatingComplaint("");
     setRatingRouteInfo(null);
+    // ─── ADDED FROM UPDATE: success toast ───
     setRatingSuccess("Rating submitted successfully.");
     window.setTimeout(() => setRatingSuccess(""), 2500);
+
+    // 2. Fire-and-forget to backend
+    api.submitFeedback({
+      rating: value,
+      complaint: entry.complaint || null,
+      category: 'routing',
+    }).catch((err) => {
+      console.warn('[feedback] Failed to save:', err.message);
+      setUserFeedback((prev) =>
+        prev.map((f) => (f.id === entry.id ? { ...f, unsynced: true } : f))
+      );
+    });
   };
 
+  // ─── CHANGED FROM UPDATE: no auto-submit on star click ───
   const handleStarSelect = (n) => {
     setRatingValue(n);
-    // Do not auto-submit — feedback is required for all ratings
   };
 
   const completeNavigationArrived = () => {
+    // ─── KEPT FROM ORIGINAL: mark route as completed on backend ───
+    if (activeRouteId) {
+      api.completeRoute(activeRouteId).catch((err) =>
+        console.warn('[routes] Failed to complete:', err.message)
+      );
+      setActiveRouteId(null);
+    }
+
+    // ─── ADDED FROM UPDATE: close exit sheet ───
     setShowNavExitSheet(false);
+
     const info = route
       ? {
           from: route.from?.name || (useLiveAsFrom ? "Live location" : "Start"),
-          to: route.to?.name || "Destination"
+          to: route.to?.name || "Destination",
         }
       : null;
+
     setIsNavigating(false);
     setNavStep(0);
     setView("map");
     setShowRoutePanel(false);
     arrivedTriggeredRef.current = false;
     setNearDestination(false);
+    // ─── ADDED FROM UPDATE: reset heading-up ───
+    setFollowHeading(false);
+    setMapBearing(0);
     openRatingPrompt(info);
+
     setTimeout(() => {
       setRoute(null);
       setSelectedPlace(null);
@@ -1959,12 +2081,11 @@ function App() {
     return CAMPUS_CENTER;
   }, [useLiveAsFrom, fromPlace, userPos]);
 
-  /** User panned or pinched — stop auto-follow so the map stays under their control. */
+  // ─── ADDED FROM UPDATE: interact handlers ───
   const stopFollowOnUserInteract = useCallback(() => {
     setFollowUser(false);
   }, []);
 
-  /** User rotated the map manually — stop heading-up so their orientation sticks. */
   const stopHeadingOnUserRotate = useCallback(() => {
     setFollowHeading(false);
   }, []);
@@ -1989,7 +2110,6 @@ function App() {
           to.name,
           mode
         );
-        // Ensure pathway reaches the destination circle/marker
         let coords = result?.coords ? [...result.coords] : [];
         if (coords.length && toLL) {
           const last = coords[coords.length - 1];
@@ -2044,7 +2164,6 @@ function App() {
       return;
     }
 
-    // Default: navigate here — ask walking vs driving then start immediately
     setSelectedPlace(place);
     setToPlace(place);
     setFollowUser(false);
@@ -2097,18 +2216,44 @@ function App() {
   const startNavigation = () => {
     if (!route && !toPlace) return;
     const mode = travelMode || route?.travelMode;
+
+    // ─── KEPT FROM ORIGINAL: save route history in background ───
+    if (userProfile && route) {
+      api
+        .saveRoute({
+          fromPlaceId: fromPlace?.id || null,
+          toPlaceId: toPlace?.id || null,
+          fromLatitude: route.from?.lat ?? getFromLatLng()[0],
+          fromLongitude: route.from?.lng ?? getFromLatLng()[1],
+          toLatitude: route.to.lat,
+          toLongitude: route.to.lng,
+          routeMode: route.mode || "campus",
+          totalDistanceMeters: route.totalDistance || 0,
+          totalTimeMinutes: route.totalTime || 0,
+          routeCoords: route.coords || [],
+          routeSteps: route.steps || null,
+          isAccessible: !!route.accessible,
+        })
+        .then((res) => {
+          if (res?.data?.id) setActiveRouteId(res.data.id);
+        })
+        .catch((err) => console.warn("[routes] Failed to save:", err.message));
+    }
+
     if (mode && route) {
       setIsNavigating(true);
       setNavStep(0);
       setView("navigate");
       setShowRoutePanel(false);
       setFollowUser(!!userPos && useLiveAsFrom);
+      // ─── ADDED FROM UPDATE: reset heading-up ───
       setFollowHeading(true);
       setMapBearing(0);
       arrivedTriggeredRef.current = false;
       setNearDestination(false);
       return;
     }
+
     setPendingNavPlace(toPlace || route?.to || null);
     setModePromptIntent("navigate");
     setShowModeBeforeNav(true);
@@ -2153,14 +2298,15 @@ function App() {
     setNavStep(0);
     setView("navigate");
     setFollowUser(!!userPos && useLiveAsFrom);
+    // ─── ADDED FROM UPDATE: reset heading-up ───
     setFollowHeading(true);
     setMapBearing(0);
     arrivedTriggeredRef.current = false;
     setNearDestination(false);
   };
 
+  // ─── CHANGED FROM UPDATE: exit sheet instead of direct end ───
   const endNavigation = () => {
-    // Offer choice: arrived vs cancel destination
     setShowNavExitSheet(true);
   };
 
@@ -2186,7 +2332,7 @@ function App() {
     completeNavigationArrived();
   };
 
-  // Detect when user is near destination — only when navigating from live GPS (~5 m)
+  // ─── CHANGED FROM UPDATE: near-destination threshold ~5 m ───
   useEffect(() => {
     if (!isNavigating || !route?.to || !userPos || !useLiveAsFrom) {
       if (!isNavigating || !useLiveAsFrom) setNearDestination(false);
@@ -2206,7 +2352,7 @@ function App() {
     setNearDestination(near);
   }, [userPos, isNavigating, route, useLiveAsFrom]);
 
-  // Auto-advance turn-by-turn instruction from live GPS (no need to tap next)
+  // ─── ADDED FROM UPDATE: auto-advance turn-by-turn from live GPS ───
   useEffect(() => {
     if (!isNavigating || !useLiveAsFrom || !userPos || !route?.steps?.length) return;
     const steps = route.steps;
@@ -2215,15 +2361,12 @@ function App() {
       const s = steps[i];
       if (s?.lat == null || s?.lng == null) continue;
       const d = haversine(userPos, [s.lat, s.lng]);
-      // Still approaching this manoeuvre (> ~22 m away) → show it as "Next"
       if (d > 22) {
         active = i;
         break;
       }
-      // Within ~22 m of this manoeuvre → keep showing it until we pass
       active = i;
     }
-    // If past the last turn and near the end, lock on the final (arrive) step
     const last = steps[steps.length - 1];
     if (last?.lat != null && last?.lng != null) {
       const dLast = haversine(userPos, [last.lat, last.lng]);
@@ -2232,7 +2375,7 @@ function App() {
     setNavStep((prev) => (prev === active ? prev : active));
   }, [userPos, isNavigating, route, useLiveAsFrom]);
 
-  // Off-path re-route: leave path by ~5 m → recompute quickly
+  // ─── CHANGED FROM UPDATE: reroute faster (5 m / 2.5 s) ───
   const lastRerouteAt = useRef(0);
   const reroutingRef = useRef(false);
   useEffect(() => {
@@ -2245,6 +2388,7 @@ function App() {
     if (now - lastRerouteAt.current < 2500) return;
     lastRerouteAt.current = now;
     reroutingRef.current = true;
+    // ─── ADDED FROM UPDATE: rerouting indicator ───
     setIsRerouting(true);
     const to = route.to;
     const toLL = [to.lat, to.lng];
@@ -2270,7 +2414,6 @@ function App() {
     })();
   }, [userPos, isNavigating, route, useLiveAsFrom, nearDestination, computeRoute]);
 
-  // Prefer direction of the remaining path so the map "faces" the route while navigating
   const navDisplayHeading = useMemo(() => {
     if (isNavigating && route?.coords?.length > 1 && userPos) {
       let bestIdx = 0;
@@ -2671,14 +2814,15 @@ function App() {
       {userProfile && profileMode === "view" && (
         <div className="profile-view">
           <div className="profile-header-card modern">
-            <div className="profile-ul-logo-wrap">
-              <img src="/ul-logo.jpeg" alt="University of Limpopo" className="profile-ul-logo" />
-            </div>
             <div className="profile-avatar">
               {(userProfile.fullName || "S").charAt(0).toUpperCase()}
             </div>
             <div className="profile-header-info">
               <div className="profile-name">{userProfile.fullName}</div>
+              <div className="profile-sn">
+                {userProfile.role === "admin" ? "ID: " : ""}
+                {userProfile.studentNumber}
+              </div>
               <span className={`profile-badge ${userProfile.role === "admin" ? "admin" : userProfile.role === "guest" ? "guest" : "student"}`}>
                 {userProfile.role === "admin" ? "Administrator" : userProfile.role === "guest" ? "Guest" : "Student"}
               </span>
@@ -3181,6 +3325,22 @@ function App() {
     );
   };
 
+  // ─── KEPT FROM ORIGINAL: page loading overlay ───
+  const renderPageLoadingOverlay = (label = "Loading page…") => (
+    pageLoading ? (
+      <div className="app-loading-splash" data-theme={theme} role="status" aria-live="polite" aria-label={label}>
+        <div className="app-loading-splash-bg" aria-hidden="true" />
+        <div className="app-loading-splash-card">
+          <img src="/ul-logo.jpeg" alt="University of Limpopo" className="auth-logo" />
+          <div className="auth-uni">University of Limpopo</div>
+          <h2 className="auth-title">Campus Navigator</h2>
+          <div className="routing-spinner app-loading-spinner" />
+          <p className="app-loading-text">{label}</p>
+        </div>
+      </div>
+    ) : null
+  );
+
   // While we're restoring the session, show a neutral splash (avoids auth flash)
   if (bootstrapping) {
     return (
@@ -3204,6 +3364,7 @@ function App() {
   if (!userProfile) {
     const role = profileForm.role === "guest" ? "guest" : "student";
     const isGuest = role === "guest";
+    // ─── CHANGED FROM UPDATE: isLogin derived from profileMode !== "register" ───
     const isLogin = profileMode !== "register";
     const appUrl = "https://ul-campus-nav.vercel.app/";
     const qrSrc = `https://api.qrserver.com/v1/create-qr-code/?size=180x180&data=${encodeURIComponent(appUrl)}&bgcolor=ffffff&color=1B2642&margin=8`;
@@ -3269,7 +3430,6 @@ function App() {
             </div>
           )}
 
-          {/* Verify Email Banner */}
           {profileMessage && (
             profileMessage.toLowerCase().includes("verify") ? (
               <div className="verify-email-banner">
@@ -3314,15 +3474,10 @@ function App() {
                     onChange={(e) => setProfileForm((f) => ({ ...f, email: e.target.value }))}
                   />
                 </div>
-                {authLoading && (
-                  <div className="auth-loading" role="status">
-                    <div className="routing-spinner" />
-                    <span>Please wait…</span>
-                  </div>
-                )}
-                <button type="button" className="btn-primary full auth-submit" onClick={handleGuestContinue} disabled={authLoading}>
-                  {authLoading ? "Please wait…" : "Continue as guest"}
+                <button type="button" className="btn-primary full auth-submit" onClick={handleGuestContinue}>
+                  Continue as guest
                 </button>
+
               </>
             ) : (
               <>
@@ -3402,7 +3557,7 @@ function App() {
                   />
                 </div>
 
-                {!isLogin && ( 
+                {!isLogin && (
                   <>
                     <div className="form-group">
                       <label><Lock size={14} /> Confirm password</label>
@@ -3429,6 +3584,7 @@ function App() {
                   Show password
                 </label>
 
+                {/* ─── ADDED FROM UPDATE: forgot password link opens sheet ─── */}
                 {isLogin && (
                   <button
                     type="button"
@@ -3451,12 +3607,12 @@ function App() {
                   </div>
                 )}
                 {isLogin ? (
-                  <button type="button" className="btn-primary full auth-submit" onClick={handleLogin} disabled={authLoading}>
-                    {authLoading ? "Signing in…" : "Sign in as student"}
+                  <button type="button" className="btn-primary full auth-submit" onClick={handleLogin}>
+                    Sign in as student
                   </button>
                 ) : (
-                  <button type="button" className="btn-primary full auth-submit" onClick={handleRegister} disabled={authLoading}>
-                    {authLoading ? "Please wait…" : "Create student account"}
+                  <button type="button" className="btn-primary full auth-submit" onClick={handleRegister}>
+                    Create student account
                   </button>
                 )}
               </>
@@ -3507,6 +3663,7 @@ function App() {
           </div>
         )}
 
+        {/* ─── ADDED FROM UPDATE: forgot password sheet ─── */}
         {showForgotPassword && (
           <div
             className="forgot-sheet-overlay"
@@ -3604,6 +3761,7 @@ function App() {
             </div>
           </div>
         )}
+        {renderPageLoadingOverlay("Loading page…")}
       </div>
     );
   }
@@ -3615,7 +3773,7 @@ function App() {
       instruction: `Head to ${route.to.name}`,
       distance: route.totalDistance
     };
-    // Live distance to the current "Next" manoeuvre when GPS is on
+    // ─── ADDED FROM UPDATE: live step distance ───
     const liveStepDist =
       useLiveAsFrom && userPos && step?.lat != null && step?.lng != null
         ? Math.round(haversine(userPos, [step.lat, step.lng]))
@@ -3628,8 +3786,6 @@ function App() {
       return `${Math.round(m)} m`;
     };
 
-    // Place-to-place (campus → campus): always show full route from start point to end point.
-    // Live progress only when navigating from real GPS ("Your live location").
     const useLiveProgress = !!(useLiveAsFrom && userPos && route.coords?.length > 1);
     const progress = useLiveProgress
       ? routeProgressFromPosition(route.coords, userPos)
@@ -3702,6 +3858,7 @@ function App() {
             dragging
             minZoom={11}
             maxZoom={20}
+            // ─── ADDED FROM UPDATE: rotate support ───
             rotate
             touchRotate
             rotateControl={false}
@@ -3713,6 +3870,7 @@ function App() {
               attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
             />
             {buildingsGeo && <GeoJSON data={buildingsGeo} style={buildingStyle} />}
+            {/* ─── ADDED FROM UPDATE: building labels + nearby place labels ─── */}
             {buildingsGeo && (
               <BuildingNameLabels buildingsGeo={buildingsGeo} minZoom={16} />
             )}
@@ -3735,12 +3893,23 @@ function App() {
             {remainingPath?.length > 1 && (
               <Polyline positions={remainingPath} color={ROUTE_BLUE} weight={7} opacity={0.95} />
             )}
+            {/* ─── ADDED FROM UPDATE: direction arrows on the route ─── */}
+            {remainingPath?.length > 1 && steps?.length > 0 && (
+              <RouteDirectionArrows
+                pathCoords={remainingPath}
+                steps={steps}
+                nextStepIndex={navStep}
+                mapBearing={followHeading ? mapBearing : 0}
+              />
+            )}
             {useLiveAsFrom && userPos && (
-              <YouAreHereMarker
+              <Marker
+                key={`me-${followHeading ? "hu" : Math.round((navHeading ?? -1) / 8)}`}
                 position={userPos}
-                heading={navHeading}
-                isDark={theme === "dark"}
-                followHeading={followHeading}
+                icon={createYouAreHereIcon(
+                  followHeading ? 0 : navHeading,
+                  theme === "dark"
+                )}
                 zIndexOffset={1000}
               />
             )}
@@ -3772,6 +3941,7 @@ function App() {
               zoomIn
               heading={navHeading}
             />
+            {/* ─── ADDED FROM UPDATE: heading-up + stop-follow-on-interact ─── */}
             <HeadingUpController
               heading={navHeading}
               enabled={followHeading && navHeading != null && !Number.isNaN(navHeading)}
@@ -3794,6 +3964,7 @@ function App() {
             <span className="chip-arrow">→</span>
             <span className="chip-to">{toLabel}</span>
           </div>
+          {/* ─── ADDED FROM UPDATE: reroute toast ─── */}
           {isRerouting && (
             <div className="nav-reroute-toast" role="status">
               <div className="routing-spinner small" />
@@ -3820,6 +3991,7 @@ function App() {
           </div>
         </div>
 
+        {/* ─── CHANGED FROM UPDATE: heading-up recenter + north-up FABs ─── */}
         <button
           type="button"
           className={`nav-recenter-fab ${followHeading ? "is-heading-up" : ""}`}
@@ -3851,6 +4023,7 @@ function App() {
           </button>
         )}
 
+        {/* ─── ADDED FROM UPDATE: nav exit sheet ─── */}
         {showNavExitSheet && (
           <div className="nav-exit-overlay" role="dialog" aria-modal="true" aria-labelledby="nav-exit-title">
             <div className="nav-exit-sheet" onClick={(e) => e.stopPropagation()}>
@@ -3873,6 +4046,7 @@ function App() {
           </div>
         )}
 
+        {/* ─── ADDED FROM UPDATE: bottom instruction card with turn glyph ─── */}
         <div className="nav-overlay-bottom">
           <div className="nav-instruction-card">
             <div className="nav-turn-badge" aria-hidden="true">
@@ -3885,13 +4059,13 @@ function App() {
                 <span className="nav-step-dist">{formatDist(stepDistDisplay)}</span>
               )}
             </div>
-
           </div>
         </div>
       </div>
     );
   }
 
+  // ─── CHANGED FROM UPDATE: rating modal requires written feedback for all ratings ───
   const renderRatingModal = () => {
     if (!showRating) return null;
     const feedbackLen = (ratingComplaint || "").trim().length;
@@ -4232,6 +4406,7 @@ function App() {
           )}
         </div>
         {renderRatingModal()}
+        {renderPageLoadingOverlay("Loading page…")}
       </div>
     );
   }
@@ -4275,6 +4450,7 @@ function App() {
         {renderBottomNav("search")}
         {renderSettingsModal()}
         {renderModeBeforeNavModal()}
+        {renderPageLoadingOverlay("Loading page…")}
       </div>
     );
   }
@@ -4293,6 +4469,7 @@ function App() {
         {renderBottomNav("events")}
         {renderSettingsModal()}
         {renderModeBeforeNavModal()}
+        {renderPageLoadingOverlay("Loading page…")}
       </div>
     );
   }
@@ -4312,6 +4489,7 @@ function App() {
         {renderBottomNav("map")}
         {renderSettingsModal()}
         {renderModeBeforeNavModal()}
+        {renderPageLoadingOverlay("Loading page…")}
       </div>
     );
   }
@@ -4330,6 +4508,7 @@ function App() {
         {renderBottomNav("profile")}
         {renderSettingsModal()}
         {renderModeBeforeNavModal()}
+        {renderPageLoadingOverlay("Loading page…")}
       </div>
     );
   }
@@ -4504,6 +4683,7 @@ function App() {
         {renderBottomNav("route")}
         {renderSettingsModal()}
         {renderModeBeforeNavModal()}
+        {renderPageLoadingOverlay("Loading page…")}
       </div>
     );
   }
@@ -4764,15 +4944,12 @@ function App() {
               </>
             )}
             {userPos && (
-              <YouAreHereMarker
+              <Marker
                 position={userPos}
-                heading={navDisplayHeading}
-                isDark={theme === "dark"}
-                followHeading={false}
-                zIndexOffset={1000}
+                icon={createYouAreHereIcon(navDisplayHeading, theme === "dark")}
               >
                 <Popup>You are here (live)</Popup>
-              </YouAreHereMarker>
+              </Marker>
             )}
             {userPos && (
               <CircleMarker
@@ -4793,6 +4970,7 @@ function App() {
               zoomIn={isNavigating}
               heading={userHeading}
             />
+            {/* ─── ADDED FROM UPDATE: stop follow on drag ─── */}
             <StopFollowOnInteract
               active={followUser}
               onInteract={stopFollowOnUserInteract}
@@ -4885,6 +5063,7 @@ function App() {
         {renderSettingsModal()}
         {renderModeBeforeNavModal()}
         {renderRatingModal()}
+        {/* ─── ADDED FROM UPDATE: toasts ─── */}
         {ratingSuccess && (
           <div className="app-toast app-toast-success" role="status">
             {ratingSuccess}
@@ -4895,6 +5074,7 @@ function App() {
             {navToast}
           </div>
         )}
+        {renderPageLoadingOverlay("Loading page…")}
       </main>
     </div>
   );
