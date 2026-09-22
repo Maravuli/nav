@@ -3355,7 +3355,7 @@ function App() {
     const isGuest = role === "guest";
     // ─── CHANGED FROM UPDATE: isLogin derived from profileMode !== "register" ───
     const isLogin = profileMode !== "register";
-    const appUrl = "https://ul-campus-nav.vercel.app/";
+    const appUrl = "https://nav-six-rho.vercel.app/";
     const qrSrc = `https://api.qrserver.com/v1/create-qr-code/?size=180x180&data=${encodeURIComponent(appUrl)}&bgcolor=ffffff&color=1B2642&margin=8`;
 
     return (
